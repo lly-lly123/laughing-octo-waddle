@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>超级定制器（含伪 AI）</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f6fb;--card:#ffffff;--accent:#6A5ACD}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Arial;background:var(--bg);color:#111;padding:24px}
+.container{max-width:980px;margin:0 auto}
+.header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.brand{font-weight:700;color:var(--accent);font-size:20px}
+.grid{display:grid;grid-template-columns:1fr 420px;gap:18px;margin-top:18px}
+.card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 28px rgba(24,39,75,0.06)}
+.field{margin-bottom:12px}
+select,input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #dde6f3}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 12px;border-radius:10px;cursor:pointer}
+.preview{height:480px;border-radius:10px;overflow:hidden;border:1px solid #e6eefb}
+.row{display:flex;gap:8px}
+.small{font-size:13px;color:#666}
+.template{padding:8px;border-radius:8px;border:1px dashed #e0e8ff;cursor:pointer}
+.template.selected{background:linear-gradient(90deg,#f6f5ff,#eefbff);border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="brand">超级定制器 · 无需 API · 伪 AI 即用</div>
+    <div class="small">可视化编辑 · QR · 下载 · 多主题</div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h3>基础设置</h3>
+        <div class="field">
+          <label class="small">选择背景图片</label>
+          <select id="bgSelect"></select>
+        </div>
+        <div class="field">
+          <label class="small">选择背景音乐</label>
+          <select id="bgmSelect"></select>
+        </div>
+        <div class="field">
+          <label class="small">底部文字（可留空隐藏）</label>
+          <input id="footerInput" placeholder="如：Alex to Mira">
+        </div>
+        <div class="field">
+          <label class="small">页面标题</label>
+          <input id="titleInput" placeholder="例如：我们的纪念日">
+        </div>
+        <div class="field">
+          <label class="small">页面描述</label>
+          <input id="descInput" placeholder="短句 / 描述">
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>弹窗编辑器（可视化）</h3>
+        <div class="field">
+          <textarea id="boxes" rows="6" placeholder="每行一条弹窗文案"></textarea>
+        </div>
+        <div class="row">
+          <button class="btn" onclick="addPopup()">在预览中添加弹窗</button>
+          <button class="btn" style="background:#4CAF50" onclick="applyPreview()">应用到预览</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>伪 AI 文案生成器（一键添加）</h3>
+        <div class="small">不需要 API，立即生成：情感 / 浪漫 / 搞笑 / 文艺 模板</div>
+        <div style="margin-top:10px" class="row">
+          <select id="aiMode">
+            <option value="romance">浪漫</option>
+            <option value="poem">文艺</option>
+            <option value="funny">搞笑</option>
+            <option value="short">短句</option>
+          </select>
+          <button class="btn" onclick="generatePseudoAI()">生成并追加</button>
+        </div>
+        <div style="margin-top:10px" class="small">提示：可连续点击生成多条，系统会随机拼接句式。</div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>模板库（点击选择）</h3>
+        <div class="row">
+          <div class="template selected" onclick="selectTemplate(0)" id="tpl0">纪念日模板</div>
+          <div class="template" onclick="selectTemplate(1)" id="tpl1">旅行回忆</div>
+          <div class="template" onclick="selectTemplate(2)" id="tpl2">生日祝福</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>实时预览</h3>
+        <iframe id="preview" class="preview"></iframe>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn" onclick="generateLink()">生成专属链接</button>
+          <button class="btn" style="background:#FF7043" onclick="downloadHTML()">一键导出 HTML</button>
+        </div>
+        <div style="margin-top:10px" id="linkArea"></div>
+        <div style="margin-top:8px" id="qrArea"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// load lists
+async function loadLists(){
+  const bgm = await fetch('bgm.json').then(r=>r.json());
+  const imgs = await fetch('images.json').then(r=>r.json());
+  const bsel = document.getElementById('bgmSelect');
+  bgm.forEach(x=>{ const o=document.createElement('option'); o.value=x.url; o.textContent=x.name; bsel.appendChild(o); });
+  const isel = document.getElementById('bgSelect');
+  imgs.forEach(x=>{ const o=document.createElement('option'); o.value=x.url; o.textContent=x.name; isel.appendChild(o); });
+  // set defaults
+  document.getElementById('bgSelect').selectedIndex = 0;
+  document.getElementById('bgmSelect').selectedIndex = 0;
+  applyPreview();
+}
+loadLists();
+
+// templates
+const templates = [
+  {title:'我们的纪念日',desc:'今天我们一起走过的所有日子，都是最好的回忆。',boxes:['第一次见面时的笑容','那年一起追的电影','愿未来依旧有你']},
+  {title:'旅行回忆',desc:'风和日丽，背包与机票，留下了我们最真实的笑声。',boxes:['那天迷路的路口','海边的拥抱','最难忘的小吃摊']},
+  {title:'生日祝福',desc:'愿你每一岁都被温柔以待。',boxes:['许愿的蛋糕','热闹的朋友','深夜的私语']}
+];
+
+function selectTemplate(i){
+  document.querySelectorAll('.template').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('tpl'+i).classList.add('selected');
+  const t = templates[i];
+  document.getElementById('titleInput').value = t.title;
+  document.getElementById('descInput').value = t.desc;
+  document.getElementById('boxes').value = t.boxes.join('\n');
+  applyPreview();
+}
+
+// preview handling
+function applyPreview(){
+  const bg = encodeURIComponent(document.getElementById('bgSelect').value);
+  const bgm = encodeURIComponent(document.getElementById('bgmSelect').value);
+  const footer = encodeURIComponent(document.getElementById('footerInput').value || 'none');
+  const title = encodeURIComponent(document.getElementById('titleInput').value || '');
+  const desc = encodeURIComponent(document.getElementById('descInput').value || '');
+  const boxes = encodeURIComponent(document.getElementById('boxes').value.split('\n').filter(x=>x.trim()!=='').join('|||'));
+  const url = 'index.html?bg='+bg+'&bgm='+bgm+'&footer='+footer+'&title='+title+'&desc='+desc+'&boxes='+boxes;
+  document.getElementById('preview').src = url;
+}
+
+// add popup visually in preview by inserting a line
+function addPopup(){
+  const text = prompt('输入要在预览中添加的弹窗内容：');
+  if(text){
+    const ta = document.getElementById('boxes');
+    ta.value = ta.value + (ta.value? '\n':'') + text;
+    applyPreview();
+  }
+}
+
+// pseudo AI generator
+function generatePseudoAI(){
+  const mode = document.getElementById('aiMode').value;
+  const rom = [
+    '在星光下，我看清了你柔软的世界。',
+    '愿此刻的微风替我捎去温柔的问候。',
+    '时间会证明，美好总会来到我们身边。'
+  ];
+  const poem = [
+    '月光轻撒在你窗前，像翻开的信笺。',
+    '花开一季，一季又一季，像我们未完的故事。'
+  ];
+  const funny = [
+    '你笑一次，我就想买一次甜点，亏得钱包不够厚。',
+    '别走，留下来当我下一个笑点收藏家。'
+  ];
+  const short = [
+    '一直在。','爱你如初。','遇见即是幸运。'
+  ];
+  let pool = short;
+  if(mode==='romance') pool = rom.concat(short);
+  if(mode==='poem') pool = poem.concat(short);
+  if(mode==='funny') pool = funny.concat(short);
+  // generate 1-3 lines
+  const n = Math.floor(Math.random()*3)+1;
+  const out = [];
+  for(let i=0;i<n;i++){
+    out.push(pool[Math.floor(Math.random()*pool.length)]);
+  }
+  // append to boxes textarea
+  const ta = document.getElementById('boxes');
+  ta.value = ta.value + (ta.value? '\n':'') + out.join('\n');
+  applyPreview();
+}
+
+// generate link and QR
+function generateLink(){
+  const bg = encodeURIComponent(document.getElementById('bgSelect').value);
+  const bgm = encodeURIComponent(document.getElementById('bgmSelect').value);
+  const footer = encodeURIComponent(document.getElementById('footerInput').value||'none');
+  const title = encodeURIComponent(document.getElementById('titleInput').value||'');
+  const desc = encodeURIComponent(document.getElementById('descInput').value||'');
+  const boxes = encodeURIComponent(document.getElementById('boxes').value.split('\n').filter(x=>x.trim()!=='').join('|||'));
+  const full = location.origin + location.pathname.replace('custom.html','index.html') + '?bg='+bg+'&bgm='+bgm+'&footer='+footer+'&title='+title+'&desc='+desc+'&boxes='+boxes;
+  const area = document.getElementById('linkArea');
+  area.innerHTML = '<a class="downloadLink" href="'+full+'" target="_blank">'+full+'</a>';
+  const qr = document.getElementById('qrArea');
+  qr.innerHTML = '<img src="https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl='+encodeURIComponent(full)+'" alt="qr">';
+}
+
+// download HTML export (self-contained)
+function downloadHTML(){
+  // build a self-contained HTML using current settings (images are external)
+  const bg = document.getElementById('bgSelect').value;
+  const bgm = document.getElementById('bgmSelect').value;
+  const footer = document.getElementById('footerInput').value||'';
+  const title = (document.getElementById('titleInput').value||'').replace(/</g,'&lt;');
+  const desc = (document.getElementById('descInput').value||'').replace(/</g,'&lt;');
+  const boxes = (document.getElementById('boxes').value.split('\n').filter(x=>x.trim()!=='').join('|||')).replace(/</g,'&lt;');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{margin:0;font-family:Arial;background-image:url('${bg}');background-size:cover;color:#fff}.popup{position:absolute;padding:12px;border-radius:12px;background:#fff;color:#111}</style></head><body><h1>${title}</h1><p>${desc}</p><script>const boxes='${boxes}';if(boxes){boxes.split('|||').forEach((t,i)=>{const d=document.createElement('div');d.className='popup';d.style.left=(60+i*30)+'px';d.style.top=(120+i*30)+'px';d.innerText=t;document.body.appendChild(d);});}</script></body></html>`;
+  const blob = new Blob([html], {type: 'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'custom_page.html'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// initialize with default template
+selectTemplate(0);
+applyPreview();
+</script>
+</body>
+</html>
