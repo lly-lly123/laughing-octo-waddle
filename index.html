@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>你的专属展示页</title>
+<style>
+:root{--glass: rgba(255,255,255,0.12);--accent:#6A5ACD;--muted:#f5f7fb;}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background-size:cover;background-position:center;color:#fff}
+.header{position:fixed;left:16px;top:16px;z-index:1000;background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));backdrop-filter:blur(6px);padding:10px 14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.25)}
+.controls{position:fixed;right:16px;top:16px;z-index:1000;background:var(--glass);padding:10px;border-radius:12px;backdrop-filter:blur(6px)}
+.btn{background:var(--accent);border:none;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer}
+.footer{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:10px 14px;border-radius:10px;background:rgba(0,0,0,0.35);font-size:16px;text-shadow:0 1px 2px rgba(0,0,0,0.6)}
+.card{position:relative;margin:60px auto;padding:18px;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));max-width:900px;backdrop-filter:blur(4px)}
+.popup{position:absolute;min-width:200px;max-width:320px;padding:12px;border-radius:12px;background:#fff;color:#111;box-shadow:0 8px 30px rgba(0,0,0,0.3);cursor:grab}
+.popup .close{position:absolute;right:8px;top:6px;border:none;background:transparent;font-weight:bold;cursor:pointer}
+.downloadLink{color:#0ff;text-decoration:underline}
+.qr{width:120px;height:120px;border-radius:8px;background:#fff;padding:6px}
+.small{font-size:13px;color:#ddd}
+</style>
+</head>
+<body>
+<div class="header">展示页 · 拖拽弹窗可交互</div>
+<div class="controls">
+  <button class="btn" onclick="downloadSelf()">一键下载此页面</button>
+  <div style="height:8px"></div>
+  <div class="small" id="qrWrap"></div>
+</div>
+
+<div id="main" class="card">
+  <h1 id="title">欢迎</h1>
+  <p id="desc" class="small">这是你的自定义页面，弹窗可拖拽、可编辑、并且页面支持背景音乐。</p>
+</div>
+
+<div id="footerWrap"></div>
+
+<script>
+// parse params
+const p=new URLSearchParams(location.search);
+const bg=p.get('bg');
+const bgm=p.get('bgm');
+const footer=p.get('footer');
+const boxes=p.get('boxes');
+const title=p.get('title') || '';
+const desc=p.get('desc') || '';
+
+if(bg) document.body.style.backgroundImage=`url(${decodeURIComponent(bg)})`;
+if(title) document.getElementById('title').innerText=decodeURIComponent(title);
+if(desc) document.getElementById('desc').innerText=decodeURIComponent(desc);
+
+let audio;
+if(bgm){
+  try{
+    audio=new Audio(decodeURIComponent(bgm));
+    audio.loop=true; audio.autoplay=true; audio.volume=0.8;
+    audio.play().catch(()=>{});
+  }catch(e){console.error(e)}
+}
+
+// footer
+if(footer && footer!=='none'){
+  const f=document.createElement('div'); f.className='footer'; f.innerText=decodeURIComponent(footer);
+  document.getElementById('footerWrap').appendChild(f);
+}
+
+// create draggable popup elements
+function makeDrag(el){
+  el.onpointerdown = (e)=>{
+    el.setPointerCapture(e.pointerId);
+    const startX = e.clientX, startY=e.clientY;
+    const origLeft = el.offsetLeft, origTop = el.offsetTop;
+    function move(ev){
+      el.style.left = (origLeft + ev.clientX - startX) + 'px';
+      el.style.top = (origTop + ev.clientY - startY) + 'px';
+    }
+    function up(ev){
+      el.releasePointerCapture(e.pointerId);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+}
+
+// boxes
+if(boxes){
+  const arr = decodeURIComponent(boxes).split('|||');
+  arr.forEach((t,i)=>{
+    const d=document.createElement('div'); d.className='popup';
+    d.style.left = (60 + i*30) + 'px';
+    d.style.top = (120 + i*30) + 'px';
+    d.innerHTML = `<button class="close" onclick="this.parentNode.remove()">✕</button><div style="padding-top:6px">${t}</div>`;
+    document.body.appendChild(d);
+    makeDrag(d);
+  });
+}
+
+// allow download of static html (self-contained) - build a HTML string and download
+function downloadSelf(){
+  // build URL params as current
+  const params = location.search;
+  // fetch current document HTML and replace body? We'll build a simple self-contained page
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>导出页面</title>
+  <style>body{margin:0;font-family:Arial;background-size:cover;background-position:center;color:#fff} .popup{position:absolute;padding:12px;border-radius:12px;background:#fff;color:#111}</style>
+  </head><body style="background-image: url('${decodeURIComponent(bg)||''}')">
+  <div style="padding:20px;color:#fff"><h1>${(document.getElementById('title').innerText).replace(/</g,'&lt;')}</h1><p>${(document.getElementById('desc').innerText).replace(/</g,'&lt;')}</p></div>
+  <script>
+  const boxesParam = '${decodeURIComponent(boxes)||''}';
+  if(boxesParam){
+    boxesParam.split('|||').forEach((t,i)=>{
+      const d=document.createElement('div'); d.className='popup';
+      d.style.left = (60 + i*30) + 'px';
+      d.style.top = (120 + i*30) + 'px';
+      d.innerHTML = '<div>'+t.replace(/</g,'&lt;')+'</div>';
+      document.body.appendChild(d);
+    });
+  }
+  </script>
+  </body></html>`;
+  const blob = new Blob([html], {type: 'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='my_custom_page.html'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// QR code (uses chart api) - generate link to this page
+(function genQR(){
+  try{
+    const link = location.href;
+    const q = 'https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=' + encodeURIComponent(link);
+    const img = document.createElement('img'); img.src=q; img.className='qr';
+    const wrap=document.getElementById('qrWrap'); wrap.appendChild(img);
+    const s = document.createElement('div'); s.className='small'; s.innerText='扫码访问此页面';
+    wrap.appendChild(s);
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
